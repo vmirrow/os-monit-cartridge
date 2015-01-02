@@ -1,0 +1,41 @@
+set daemon  30              # check services at 30-seconds intervals
+
+set idfile ${OPENSHIFT_MONIT_DIR}run/monit.id
+set statefile ${OPENSHIFT_MONIT_DIR}run/monit.state
+set pidfile ${OPENSHIFT_MONIT_DIR}run/monit.pid
+set logfile ${OPENSHIFT_MONIT_DIR}log/monit.log
+
+set mailserver localhost
+
+set eventqueue
+  basedir ${OPENSHIFT_MONIT_DIR}var/events
+  slots 100
+
+set mail-format { from: monit@${OPENSHIFT_APP_DNS} }
+set alert ${MONIT_ALERT_EMAIL}
+
+set httpd port ${OPENSHIFT_MONIT_WEB_PORT} and use address ${OPENSHIFT_MONIT_HTTP_IP}
+  allow admin:${OPENSHIFT_MONIT_PASSWORD}
+
+# Basic OpenShift monitoring
+
+check program MEMORY_QUOTA with path "${OPENSHIFT_MONIT_DIR}bin/scripts/cgroups-memory-check.sh"
+  start program = "${OPENSHIFT_MONIT_DIR}bin/scripts/oo-env.sh ${OPENSHIFT_PRIMARY_CARTRIDGE_DIR}bin/control start"
+  stop program = "${OPENSHIFT_MONIT_DIR}bin/scripts/oo-env.sh ${OPENSHIFT_PRIMARY_CARTRIDGE_DIR}bin/control stop"
+  if status > 80
+    then alert
+  if status > 90
+    then restart
+  if 5 restarts within 5 cycles
+    then timeout
+
+check program STORAGE_QUOTA with path "${OPENSHIFT_MONIT_DIR}bin/scripts/quota-check.sh"
+  if status > 80 then alert
+  if status > 90
+    then exec "${OPENSHIFT_MONIT_DIR}bin/scripts/oo-env.sh ${OPENSHIFT_PRIMARY_CARTRIDGE_DIR}bin/control tidy"
+
+check host ${OPENSHIFT_GEAR_DNS} with address ${OPENSHIFT_GEAR_DNS}
+  start program = "${OPENSHIFT_MONIT_DIR}bin/scripts/oo-env.sh ${OPENSHIFT_PRIMARY_CARTRIDGE_DIR}bin/control start"
+  stop program = "${OPENSHIFT_MONIT_DIR}bin/scripts/oo-env.sh ${OPENSHIFT_PRIMARY_CARTRIDGE_DIR}bin/control stop"
+  if failed port 80 protocol http for 2 cycles then restart
+  if 2 restarts within 4 cycles then timeout
